@@ -19,8 +19,7 @@
     "minimum": "12",
     "verified": "13"
   },
-  "url": "https://github.com/triocks/npc-architect",
+"url": "https://github.com/triocks/npc-architect",
   "manifest": "https://github.com/triocks/npc-architect/releases/latest/download/module.json",
-  "download": "https://github.com/triocks/npc-architect/releases/download/v1.0.0/module.zip"
-
+  "download": "https://github.com/triocks/npc-architect/releases/download/v0.9/module.zip"
 }
