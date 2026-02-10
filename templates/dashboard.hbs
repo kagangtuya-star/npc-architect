@@ -1,0 +1,46 @@
+<section class="architect-dashboard" style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 5px;">
+    <div class="header-section" style="flex: 0 0 auto;">
+        <h2><i class="fas fa-drafting-compass"></i> NPC Construction Hub</h2>
+        <div class="form-group">
+            <label>Target Level</label>
+            <select id="npc-level-input">
+                {{#each levels}}
+                <option value="{{this}}" {{#if (eq ../npcData.level this)}}selected{{/if}}>Level {{this}}</option>
+                {{/each}}
+            </select>
+        </div>
+    </div>
+
+    <hr style="flex: 0 0 auto; width: 100%;">
+
+    <div class="drafting-container" style="flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;">
+        <label><strong>NPC Drafting Table (Editable)</strong></label>
+        {{!-- Note: flex: 1 on the textarea below makes it fill all available middle space --}}
+        <textarea id="npc-input-editor" style="flex: 1; width: 100%; margin-top: 10px; font-family: 'Signika', sans-serif; resize: none; padding: 10px;">
+Name: {{npcData.name}}
+Ethnicity/Race: {{npcData.ethnicity}} {{npcData.race}}
+Age: {{npcData.age}}
+Class: {{npcData.class}} {{#if npcData.subclass}}({{npcData.subclass}}){{/if}}
+Social: {{npcData.socialClass}} {{#if npcData.socialSubclass}}({{npcData.socialSubclass}}){{/if}}
+
+--- PERSONALITY & BEHAVIOR ---
+Attitude: {{npcData.attitude}} {{#if npcData.attitudeSubclass}}({{npcData.attitudeSubclass}}){{/if}}
+Personality: {{npcData.personality}} {{#if npcData.personalityTrait}}({{npcData.personalityTrait}}){{/if}}
+Mannerisms: {{npcData.mannerisms}} {{#if npcData.mannerismSubclass}}({{npcData.mannerismSubclass}}){{/if}}
+Quirks: {{npcData.quirks}} {{#if npcData.quirkSubclass}}({{npcData.quirkSubclass}}){{/if}}
+Interests: {{npcData.interests}} {{#if npcData.interestSubclass}}({{npcData.interestSubclass}}){{/if}}
+
+--- ARCHITECT NOTES ---
+(You can paste an old edition statblock here or type specific instructions like "Give him a glowing red eye".)
+        </textarea>
+    </div>
+
+    <footer class="controls" style="flex: 0 0 auto; margin-top: 10px; display: flex; gap: 10px; padding-bottom: 5px;">
+        <button type="button" id="reroll-btn" style="flex: 1;">
+            <i class="fas fa-dice"></i> Roll DNA
+        </button>   
+        <button type="button" id="create-npc-btn" class="copy-glow" style="flex: 1;">
+            <i class="fas fa-hammer"></i> Architect NPC
+        </button>
+    </footer>
+</section>
