@@ -20,6 +20,7 @@ Configure Foundry: Open Configure Settings -> Module Settings in Foundry.
 
 Input Key: Paste your key into the Architect: Gemini API Key field.
 
+
 🛠️ **Installation**
 Paste this Manifest URL into the Install Module dialog:
 
@@ -27,6 +28,10 @@ https://github.com/triocks/npc-architect/releases/latest/download/module.json
 
 📖 Usage
 Open the Actors Tab and click the Architect button.
+## Support the Project
+If this tool saves you prep time, consider supporting the continued development!
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/triock)
 
  ⚖️ License
 This project is licensed under the MIT License.
