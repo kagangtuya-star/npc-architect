@@ -501,135 +501,6 @@ Interests: ${data.interests} ${data.interestSubclass ? `(${data.interestSubclass
     return "";
   }
 
-  _normalizeCompendiumName(value) {
-    return `${value ?? ""}`
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/['’`´]/g, "")
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim();
-  }
-
-  _resolveOutputLanguage() {
-    const custom = game.settings.get("npc-architect", "outputLanguageCustom")?.trim();
-    if (custom) return custom;
-
-    const selected = game.settings.get("npc-architect", "outputLanguage")?.trim() || "auto";
-    const foundryLang = game.i18n?.lang || "en";
-    const resolvedCode = selected === "auto" ? foundryLang : selected;
-
-    const languageMap = {
-      en: "English",
-      zhHans: "Chinese (Simplified)",
-      zhHant: "Chinese (Traditional)",
-      zh: "Chinese",
-      ja: "Japanese",
-      ko: "Korean",
-      es: "Spanish",
-      fr: "French",
-      de: "German",
-      it: "Italian",
-      pt: "Portuguese",
-      ru: "Russian"
-    };
-
-    return languageMap[resolvedCode] || resolvedCode;
-  }
-
-  _coerceNameCandidates(value) {
-    if (typeof value === "string") return [value];
-    if (Array.isArray(value)) return value.filter(v => typeof v === "string");
-    if (value && typeof value === "object") {
-      return Object.values(value).filter(v => typeof v === "string");
-    }
-    return [];
-  }
-
-  _collectCompendiumAliases(entity) {
-    const aliases = [];
-    const pushAlias = candidate => {
-      if (typeof candidate === "string" && candidate.trim()) aliases.push(candidate.trim());
-    };
-
-    pushAlias(entity?.name);
-    pushAlias(entity?.system?.slug);
-
-    const babele = entity?.flags?.babele;
-    pushAlias(babele?.originalName);
-    pushAlias(babele?.name);
-    pushAlias(babele?.translated);
-    pushAlias(babele?.translation?.name);
-    pushAlias(babele?.sourceName);
-
-    if (Array.isArray(babele?.translations)) {
-      for (const tr of babele.translations) {
-        pushAlias(tr?.name);
-      }
-    }
-
-    return Array.from(new Set(aliases));
-  }
-
-  _matchesAnyAlias(aliases, normalizedCandidates, { partial = false } = {}) {
-    if (!aliases.length || !normalizedCandidates.length) return false;
-    const normalizedAliases = aliases
-      .map(alias => this._normalizeCompendiumName(alias))
-      .filter(Boolean);
-
-    if (!partial) {
-      return normalizedAliases.some(alias => normalizedCandidates.includes(alias));
-    }
-
-    return normalizedAliases.some(alias =>
-      normalizedCandidates.some(candidate => alias.includes(candidate) || candidate.includes(alias))
-    );
-  }
-
-  async _findCompendiumDocumentByName(pack, index, requestedName, { excludeType = null } = {}) {
-    const rawCandidates = this._coerceNameCandidates(requestedName);
-    const normalizedCandidates = rawCandidates
-      .map(candidate => this._normalizeCompendiumName(candidate))
-      .filter(Boolean);
-
-    if (!normalizedCandidates.length) return null;
-
-    // Fast path: exact match from index aliases (including babele flags if exposed in index fields)
-    for (const entry of index) {
-      if (excludeType && entry?.type === excludeType) continue;
-      const aliases = this._collectCompendiumAliases(entry);
-      if (this._matchesAnyAlias(aliases, normalizedCandidates)) {
-        return pack.getDocument(entry._id);
-      }
-    }
-
-    // Fuzzy path: partial match in index aliases
-    for (const entry of index) {
-      if (excludeType && entry?.type === excludeType) continue;
-      const aliases = this._collectCompendiumAliases(entry);
-      if (this._matchesAnyAlias(aliases, normalizedCandidates, { partial: true })) {
-        return pack.getDocument(entry._id);
-      }
-    }
-
-    // Deep path: resolve document-level aliases for babele-compatible matching
-    const docs = [];
-    for (const entry of index) {
-      if (excludeType && entry?.type === excludeType) continue;
-      const doc = await pack.getDocument(entry._id);
-      docs.push(doc);
-      const aliases = this._collectCompendiumAliases(doc);
-      if (this._matchesAnyAlias(aliases, normalizedCandidates)) return doc;
-    }
-
-    for (const doc of docs) {
-      const aliases = this._collectCompendiumAliases(doc);
-      if (this._matchesAnyAlias(aliases, normalizedCandidates, { partial: true })) return doc;
-    }
-
-    return null;
-  }
-
   async _requestGeminiCompletion({ apiKey, model, systemInstruction, npcRequest }) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -729,13 +600,9 @@ async generateNPC(npcData) {
         return ui.notifications.warn("The drafting table is empty! Roll DNA or type instructions first.");
     }
 
-    const outputLanguage = this._resolveOutputLanguage();
-    const foundryLanguageCode = game.i18n?.lang || "en";
-
     // 2. Build the Request (Your specialized logic remains untouched)
     const npcRequest = `
         COMMAND: Create a Level ${targetLevel} Pathfinder 2e NPC.
-        OUTPUT LANGUAGE: ${outputLanguage}
         
         ANALYSIS STEP (How to interpret the SOURCE TEXT):
         1. If you see "Mannerisms", "Quirks", or "Interests", these are Persona DNA traits.
@@ -749,9 +616,6 @@ async generateNPC(npcData) {
         - In the 'blurb', use: Ethnicity Race Class (Subclass)
         - Ensure the NPC returned makes sense thematically.
         - If the NPC has a valid PF2E class, create level appropriate abilities similar to the PF2E class possesses.
-        - Generate all free-text fields in ${outputLanguage}.
-        - For "inventoryNames" and "spellNames", prefer names usable in Foundry language "${foundryLanguageCode}" and compatible with Babele translations.
-        - If uncertain, keep the canonical English names in "inventoryNames" and "spellNames" for better compendium matching.
         """
         ${instructionText}
         """
@@ -762,8 +626,6 @@ async generateNPC(npcData) {
     const systemInstruction = `You are an expert Pathfinder 2e NPC Creator. Return ONLY a JSON object. 
     IMPORTANT: Do NOT include "Kits" (like Adventurer's Pack). Use individual items.
     Only add senses if the specific race/ancestry possesses them.
-    Write all descriptive text fields in ${outputLanguage}.
-    Keep "inventoryNames" and "spellNames" as compendium-search-friendly names (localized or canonical English).
 
     Schema: { 
       "name": "String", "level": ${targetLevel}, "traits": ["humanoid", "human"], "hp": Number, "ac": Number, "perception": Number, "speed": 25,
@@ -890,41 +752,24 @@ async generateNPC(npcData) {
             }
         });
 
-        // 2. GEAR SEARCH (Babele-compatible name matching)
+        // 2. GEAR SEARCH
         const gearPacks = ["pf2e.equipment-srd", "pf2e.weapons-srd", "pf2e.armor-srd"];
-        const packIndexCache = new Map();
-        const inventoryNames = Array.isArray(npc.inventoryNames) ? npc.inventoryNames : [];
-
-        for (const requestedInventoryName of inventoryNames) {
-            let matchedInventoryDoc = null;
-
-            for (const pName of gearPacks) {
-                const pack = game.packs.get(pName);
-                if (!pack) continue;
-
-                let index = packIndexCache.get(pName);
-                if (!index) {
-                    index = await pack.getIndex({ fields: ["name", "type", "flags", "system.slug"] });
-                    packIndexCache.set(pName, index);
+        for (const pName of gearPacks) {
+            const pack = game.packs.get(pName);
+            if (!pack) continue;
+            const index = await pack.getIndex({fields: ["name", "type"]});
+            for (const itemName of npc.inventoryNames) {
+                const found = index.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+                if (found && found.type !== "kit") { 
+                    const doc = await pack.getDocument(found._id);
+                    const itemData = doc.toObject();
+                    if (itemData.type === "armor" || itemData.type === "weapon") itemData.system.equipped = { value: true };
+                    finalItems.push(itemData);
                 }
-
-                matchedInventoryDoc = await this._findCompendiumDocumentByName(pack, index, requestedInventoryName, { excludeType: "kit" });
-                if (matchedInventoryDoc) break;
             }
-
-            if (!matchedInventoryDoc) {
-                console.warn("Architect | Inventory item not found in compendium:", requestedInventoryName);
-                continue;
-            }
-
-            const itemData = matchedInventoryDoc.toObject();
-            if (itemData.type === "armor" || itemData.type === "weapon") {
-                itemData.system.equipped = { value: true };
-            }
-            finalItems.push(itemData);
         }
 
-        // 3. SPELLS (Babele-compatible name matching)
+        // 3. SPELLS
         if (npc.spellNames?.length > 0) {
             const spellcastingEntry = {
                 name: `${npc.spellTradition.charAt(0).toUpperCase() + npc.spellTradition.slice(1)} Spontaneous`,
@@ -939,17 +784,15 @@ async generateNPC(npcData) {
             const [createdEntry] = await actor.createEmbeddedDocuments("Item", [spellcastingEntry]);
             const spellPack = game.packs.get("pf2e.spells-srd");
             if (spellPack) {
-                const spellIndex = await spellPack.getIndex({fields: ["name", "flags", "system.slug"]});
-                for (const requestedSpellName of npc.spellNames) {
-                    const spellDoc = await this._findCompendiumDocumentByName(spellPack, spellIndex, requestedSpellName);
-                    if (!spellDoc) {
-                        console.warn("Architect | Spell not found in compendium:", requestedSpellName);
-                        continue;
+                const spellIndex = await spellPack.getIndex({fields: ["name"]});
+                for (const sName of npc.spellNames) {
+                    const found = spellIndex.find(s => s.name.toLowerCase() === sName.toLowerCase());
+                    if (found) {
+                        const spell = await spellPack.getDocument(found._id);
+                        const spellData = spell.toObject();
+                        spellData.system.location.value = createdEntry.id;
+                        finalItems.push(spellData);
                     }
-
-                    const spellData = spellDoc.toObject();
-                    spellData.system.location.value = createdEntry.id;
-                    finalItems.push(spellData);
                 }
             }
         }

@@ -24,38 +24,6 @@ Hooks.once("init", () => {
         }
     });
 
-    game.settings.register("npc-architect", "outputLanguage", {
-        name: "Architect: Output Language",
-        hint: "Language for AI-generated textual fields. 'Auto' follows Foundry's current language.",
-        scope: "world",
-        config: isGM, // Only shows in the menu for GMs
-        type: String,
-        default: "auto",
-        choices: {
-            auto: "Auto (Use Foundry Language)",
-            en: "English",
-            zhHans: "Chinese (Simplified)",
-            zhHant: "Chinese (Traditional)",
-            ja: "Japanese",
-            ko: "Korean",
-            es: "Spanish",
-            fr: "French",
-            de: "German",
-            it: "Italian",
-            pt: "Portuguese",
-            ru: "Russian"
-        }
-    });
-
-    game.settings.register("npc-architect", "outputLanguageCustom", {
-        name: "Architect: Output Language Custom (Optional)",
-        hint: "If set, this custom language value overrides the output language dropdown.",
-        scope: "world",
-        config: isGM, // Only shows in the menu for GMs
-        type: String,
-        default: ""
-    });
-
     game.settings.register("npc-architect", "geminiApiKey", {
         name: "Architect: Gemini API Key",
         hint: "Enter your Google Gemini API key. This is stored locally on your client.",
