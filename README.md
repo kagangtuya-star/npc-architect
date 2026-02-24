@@ -1,6 +1,6 @@
 ## NPC Architect (PF2e)
 
-**NPC Architect** is a high-performance creation suite for Foundry VTT (PF2e) that leverages Gemini AI to bridge the gap between imagination and mechanical execution. It features native support for the World of Greyhawk.
+**NPC Architect** is a high-performance creation suite for Foundry VTT (PF2e) that leverages AI to bridge the gap between imagination and mechanical execution. It features native support for the World of Greyhawk.
 
 ⚔️ **Core Capabilities**
 **Universal Stat Block Generation**: Create a complete, mechanically sound PF2e NPC or Monster from a simple description (e.g., "A mutated displacer beast from the Barrier Peaks").
@@ -12,13 +12,34 @@
 **AI Drafting**: Refine personality, quirks, and mannerisms using the "Draft" feature before final creation.
 
 🔑 Setup & API Key
-This module requires a Google Gemini API Key.
+This module supports both native Gemini and OpenAI-compatible APIs.
 
-Get a Key: Go to Google AI Studio and create a free API key.
+1. Configure Foundry: Open Configure Settings -> Module Settings in Foundry.
+2. Set `Architect: AI Provider` to either:
+   - `Google Gemini (Native)`
+   - `OpenAI Compatible (Chat Completions)`
+3. Fill the matching credentials:
+   - Gemini: `Architect: Gemini API Key` + `Architect: Gemini Model`
+   - OpenAI compatible: `Architect: OpenAI Compatible API Key` + `Architect: OpenAI Compatible Base URL` + `Architect: OpenAI Compatible Model`
+4. Optional manual override:
+   - `Architect: Gemini Custom Model (Optional)`
+   - `Architect: OpenAI Custom Model (Optional)`
+   - If custom value is set, it overrides dropdown model selection.
+5. Output language:
+   - Set `Architect: Output Language` to control AI textual output language.
+   - `Auto` follows Foundry's current language (`game.i18n.lang`).
+   - `Architect: Output Language Custom (Optional)` overrides the dropdown value when set.
+6. Connectivity test:
+   - Open `Architect: AI Connection Test` and click `Test Connection`.
+   - The test uses your current provider, key, base URL, and resolved model.
 
-Configure Foundry: Open Configure Settings -> Module Settings in Foundry.
+Examples of OpenAI-compatible base URLs:
+- `https://api.openai.com/v1`
+- Your self-hosted / proxy OpenAI-compatible endpoint
 
-Input Key: Paste your key into the Architect: Gemini API Key field.
+Compendium search notes:
+- Inventory and spell imports now attempt localized + canonical name matching.
+- Matching is compatible with Babele-translated entries (including `flags.babele.originalName` fallback).
 
 
 🛠️ **Installation**
