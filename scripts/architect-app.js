@@ -449,22 +449,149 @@ Interests: ${data.interests} ${data.interestSubclass ? `(${data.interestSubclass
     }
   }
 
-
-async generateNPC(npcData) {
-    // 1. Get the Key from Settings
-    const API_KEY = game.settings.get("npc-architect", "geminiApiKey")?.trim();
-
-    if (!API_KEY) {
-        return ui.notifications.error("NPC Architect: No API Key found!");
+  _extractJsonObjectFromText(text) {
+    const raw = `${text ?? ""}`.trim();
+    if (!raw) {
+      throw new Error("Model returned empty content.");
     }
 
-    // Pull the model from settings, fallback to the preview if for some reason the setting is empty
-    const MODEL = game.settings.get("npc-architect", "geminiModel")?.trim() || "gemini-3-flash-preview";
+    let cleaned = raw;
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+    }
 
-    // Using the key in the URL for better stability as we discussed
-    const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+    try {
+      return JSON.parse(cleaned);
+    } catch (_ignored) {
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        return JSON.parse(raw.slice(start, end + 1));
+      }
+      throw new Error("Model response did not contain valid JSON.");
+    }
+  }
+
+  _extractOpenAIContent(payload) {
+    const content = payload?.choices?.[0]?.message?.content;
+
+    if (typeof content === "string") {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content
+        .map(part => {
+          if (typeof part === "string") return part;
+          if (typeof part?.text === "string") return part.text;
+          if (typeof part?.output_text === "string") return part.output_text;
+          return "";
+        })
+        .join("\n")
+        .trim();
+    }
+
+    if (typeof payload?.choices?.[0]?.text === "string") {
+      return payload.choices[0].text;
+    }
+
+    return "";
+  }
+
+  async _requestGeminiCompletion({ apiKey, model, systemInstruction, npcRequest }) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ parts: [{ text: npcRequest }] }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          thinking_config: {
+            thinking_level: "MINIMAL"
+          }
+        }
+      })
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch (_ignored) {
+      payload = {};
+    }
+
+    if (!response.ok || payload?.error) {
+      const message =
+        payload?.error?.message ||
+        `Gemini request failed with HTTP ${response.status}.`;
+      throw new Error(message);
+    }
+
+    const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error("Gemini returned no candidate content.");
+    }
+
+    return text;
+  }
+
+  async _requestOpenAICompletion({ apiKey, baseUrl, model, systemInstruction, npcRequest }) {
+    const normalizedBaseUrl = `${baseUrl ?? ""}`.trim().replace(/\/+$/, "");
+    const requestUrl = `${normalizedBaseUrl || "https://api.openai.com/v1"}/chat/completions`;
+    const authorization = apiKey.toLowerCase().startsWith("bearer ")
+      ? apiKey
+      : `Bearer ${apiKey}`;
+
+    const response = await fetch(requestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authorization
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: npcRequest }
+        ]
+      })
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch (_ignored) {
+      payload = {};
+    }
+
+    if (!response.ok) {
+      const message =
+        payload?.error?.message ||
+        `OpenAI-compatible request failed with HTTP ${response.status}.`;
+      throw new Error(message);
+    }
+
+    const text = this._extractOpenAIContent(payload);
+    if (!text) {
+      throw new Error("OpenAI-compatible API returned no message content.");
+    }
+
+    return text;
+  }
 
 
+async generateNPC(npcData) {
+    const configuredProviderRaw = game.settings.get("npc-architect", "aiProvider")?.trim() || "gemini";
+    let provider = configuredProviderRaw.toLowerCase().includes("openai") ? "openai" : "gemini";
+    const geminiApiKey = game.settings.get("npc-architect", "geminiApiKey")?.trim() || "";
+    const openaiApiKey = game.settings.get("npc-architect", "openaiApiKey")?.trim() || "";
     const html = $(this.element);
     const instructionText = html.find('#npc-input-editor').val();
     const targetLevel = parseInt(html.find('#npc-level-input').val()) || 1;
@@ -518,33 +645,59 @@ async generateNPC(npcData) {
     IMPORTANT: For attack damageType, use ONLY 'bludgeoning', 'piercing', 'slashing', 'fire', 'cold', 'electricity', 'acid', 'sonic', 'force', 'mental', 'poison', 'spirit', 'vitality', or 'void'.`;
 
     try {
-        ui.notifications.info(`Architecting level ${targetLevel} NPC...`);
-
-        const response = await fetch(URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: systemInstruction }] },
-                contents: [{ parts: [{ text: npcRequest }] }],
-                generationConfig: { 
-                    response_mime_type: "application/json",
-                    // THE FIX: Nesting the thinking_config correctly
-                    thinking_config: {
-                        thinking_level: "MINIMAL"
-                    }
-                }
-            })
-        });
-
-        const data = await response.json();
-        
-        // Safety check for the "Expired" or "Invalid" errors
-        if (data.error) {
-            console.error("Gemini API Error:", data.error);
-            return ui.notifications.error(`API Error: ${data.error.message}`);
+        if (provider === "gemini" && !geminiApiKey && openaiApiKey) {
+            provider = "openai";
+            ui.notifications.warn("NPC Architect: Gemini key is missing, auto-falling back to OpenAI-compatible provider.");
+        } else if (provider === "openai" && !openaiApiKey && geminiApiKey) {
+            provider = "gemini";
+            ui.notifications.warn("NPC Architect: OpenAI-compatible key is missing, auto-falling back to Gemini provider.");
         }
 
-        const npc = JSON.parse(data.candidates[0].content.parts[0].text);
+        if (!geminiApiKey && !openaiApiKey) {
+            return ui.notifications.error("NPC Architect: No API Key found. Configure Gemini or OpenAI-compatible key in Module Settings.");
+        }
+
+        ui.notifications.info(`Architecting level ${targetLevel} NPC via ${provider === "openai" ? "OpenAI-compatible" : "Gemini"}...`);
+
+        let modelResponseText = "";
+
+        if (provider === "openai") {
+            const apiKey = openaiApiKey;
+            if (!apiKey) {
+                return ui.notifications.error("NPC Architect: No OpenAI-compatible API Key found!");
+            }
+
+            const selectedModel = game.settings.get("npc-architect", "openaiModel")?.trim() || "gpt-4o-mini";
+            const customModel = game.settings.get("npc-architect", "openaiModelCustom")?.trim() || "";
+            const model = customModel || selectedModel;
+            const baseUrl = game.settings.get("npc-architect", "openaiBaseUrl")?.trim() || "https://api.openai.com/v1";
+
+            modelResponseText = await this._requestOpenAICompletion({
+                apiKey,
+                baseUrl,
+                model,
+                systemInstruction,
+                npcRequest
+            });
+        } else {
+            const apiKey = geminiApiKey;
+            if (!apiKey) {
+                return ui.notifications.error("NPC Architect: No Gemini API Key found!");
+            }
+
+            const selectedModel = game.settings.get("npc-architect", "geminiModel")?.trim() || "gemini-2.5-flash";
+            const customModel = game.settings.get("npc-architect", "geminiModelCustom")?.trim() || "";
+            const model = customModel || selectedModel;
+
+            modelResponseText = await this._requestGeminiCompletion({
+                apiKey,
+                model,
+                systemInstruction,
+                npcRequest
+            });
+        }
+
+        const npc = this._extractJsonObjectFromText(modelResponseText);
 
         // --- FOLDER LOGIC ---
         let folder = game.folders.find(f => f.name === "NPC Architect" && f.type === "Actor");
